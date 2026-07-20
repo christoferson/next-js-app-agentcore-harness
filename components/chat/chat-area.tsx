@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { SparklesIcon } from "lucide-react";
 import type { ChatMessage } from "@/lib/client/use-chat";
+import { cn } from "@/lib/utils";
 import { MessageBubble } from "./message";
 import { Composer } from "./composer";
 
@@ -33,6 +34,7 @@ export function ChatArea({
   onStop,
   harnessName,
   canChat,
+  railOpen = false,
 }: {
   messages: ChatMessage[];
   streaming: boolean;
@@ -40,6 +42,8 @@ export function ChatArea({
   onStop: () => void;
   harnessName?: string;
   canChat: boolean;
+  /** When the activity rail is open, left-align the column instead of centering. */
+  railOpen?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [locked, setLocked] = useState(true); // auto-scroll unless user scrolls up
@@ -74,7 +78,16 @@ export function ChatArea({
         {messages.length === 0 ? (
           <EmptyState harnessName={harnessName} />
         ) : (
-          <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6">
+          <div
+            className={cn(
+              "flex flex-col gap-5 py-6",
+              // Rail open: fill the space between sidebar and rail (wider cap,
+              // centered within it). Rail closed: classic centered chat column.
+              railOpen
+                ? "mx-auto w-full max-w-5xl px-6"
+                : "mx-auto max-w-3xl px-4"
+            )}
+          >
             {messages.map((m) => (
               <MessageBubble key={m.id} m={m} />
             ))}
@@ -86,6 +99,7 @@ export function ChatArea({
         onStop={onStop}
         streaming={streaming}
         disabled={!canChat}
+        railOpen={railOpen}
       />
     </div>
   );

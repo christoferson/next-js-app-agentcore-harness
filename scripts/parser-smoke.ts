@@ -132,17 +132,45 @@ async function main() {
     yield { contentBlockStart: { contentBlockIndex: 0, start: { toolUse: { toolUseId: 't1', name: 'fn' } } } };
     yield { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{"a":1}' } } } };
     yield { contentBlockStop: { contentBlockIndex: 0 } };
+    // Tool-result block: start carries {toolUseId, status} (index 1), content
+    // arrives as a delta ARRAY of {text}|{json} keyed by the same index.
+    yield {
+      contentBlockStart: {
+        contentBlockIndex: 1,
+        start: { toolResult: { toolUseId: 't1', status: 'success' } },
+      },
+    };
+    yield {
+      contentBlockDelta: {
+        contentBlockIndex: 1,
+        delta: {
+          toolResult: [
+            { json: { results: [{ url: 'https://example.com', title: 'Example' }] } },
+          ],
+        },
+      },
+    };
+    yield { contentBlockStop: { contentBlockIndex: 1 } };
     yield { contentBlockDelta: { delta: { text: 'hi' } } };
     yield 'garbage';
     yield { unknownEvent: {} };
     yield { messageStop: {} }; // missing stopReason
     yield { metadata: { usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 } } };
   }
-  const out: string[] = [];
-  for await (const e of adaptInvokeStream(badStream())) out.push(e.type);
+  const evts: Array<{ type: string; [k: string]: unknown }> = [];
+  for await (const e of adaptInvokeStream(badStream())) evts.push(e);
+  const out = evts.map((e) => e.type);
   ok('tool-start emitted', out.includes('tool-start'));
   ok('tool-input-delta emitted', out.includes('tool-input-delta'));
   ok('tool-stop emitted', out.includes('tool-stop'));
+  ok('tool-result emitted', out.includes('tool-result'));
+  const tr = evts.find((e) => e.type === 'tool-result');
+  ok(
+    'tool-result carries id from start + flattened json content',
+    tr?.toolUseId === 't1' &&
+      typeof tr?.content === 'string' &&
+      (tr.content as string).includes('example.com')
+  );
   ok('text-delta emitted (only real text)', out.filter((t) => t === 'text-delta').length === 1);
   ok('stop emitted w/ missing reason', out.includes('stop'));
   ok('usage emitted', out.includes('usage'));

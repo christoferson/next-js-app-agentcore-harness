@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIcon,
   DatabaseIcon,
   FileTextIcon,
   HistoryIcon,
@@ -29,6 +30,7 @@ import {
   type OverrideState,
 } from "@/components/sidebar/overrides-panel";
 import { ChatArea } from "@/components/chat/chat-area";
+import { ActivityRail } from "@/components/chat/activity-rail";
 import { HarnessDetailsDialog } from "@/components/inspectors/harness-details-dialog";
 import { MemoryEventsSheet } from "@/components/inspectors/memory-events-sheet";
 import { SessionsSheet } from "@/components/inspectors/sessions-sheet";
@@ -70,6 +72,18 @@ export function Console() {
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [ltmOpen, setLtmOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+
+  // Activity rail collapse state (wide screens only), persisted per browser.
+  const [railCollapsed, setRailCollapsed] = useState(false);
+  useEffect(() => {
+    setRailCollapsed(
+      sessionStorage.getItem("activityRailCollapsed") === "true"
+    );
+  }, []);
+  const toggleRail = useCallback((collapsed: boolean) => {
+    setRailCollapsed(collapsed);
+    sessionStorage.setItem("activityRailCollapsed", String(collapsed));
+  }, []);
 
   // Load client-safe model registry once.
   useEffect(() => {
@@ -298,22 +312,45 @@ export function Console() {
         </div>
       </aside>
 
-      {/* Main */}
-      <main className="flex min-w-0 flex-1 flex-col">
-        {listLoading && harnesses.length === 0 ? (
-          <div className="flex flex-1 flex-col gap-3 p-8">
-            <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-24 w-full max-w-2xl" />
-            <Skeleton className="h-24 w-full max-w-2xl" />
+      {/* Main + activity rail */}
+      <main className="flex min-w-0 flex-1 flex-row">
+        <div className="flex min-w-0 flex-1 flex-col">
+          {listLoading && harnesses.length === 0 ? (
+            <div className="flex flex-1 flex-col gap-3 p-8">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-24 w-full max-w-2xl" />
+              <Skeleton className="h-24 w-full max-w-2xl" />
+            </div>
+          ) : (
+            <ChatArea
+              messages={chat.messages}
+              streaming={chat.streaming}
+              onSend={onSend}
+              onStop={chat.stop}
+              harnessName={selected?.name}
+              canChat={canChat}
+              railOpen={!railCollapsed}
+            />
+          )}
+        </div>
+
+        {railCollapsed ? (
+          <div className="hidden w-10 shrink-0 flex-col items-center border-l border-border bg-card/30 py-2.5 xl:flex">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              onClick={() => toggleRail(false)}
+              title="Show Activity & Stats"
+            >
+              <ActivityIcon className="size-4 text-violet-400" />
+            </Button>
           </div>
         ) : (
-          <ChatArea
+          <ActivityRail
             messages={chat.messages}
             streaming={chat.streaming}
-            onSend={onSend}
-            onStop={chat.stop}
-            harnessName={selected?.name}
-            canChat={canChat}
+            onCollapse={() => toggleRail(true)}
           />
         )}
       </main>

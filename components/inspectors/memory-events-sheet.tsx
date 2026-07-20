@@ -1,8 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, Loader2, RefreshCw, Wrench, CornerDownRight } from "lucide-react";
+import {
+  ChevronDown,
+  Loader2,
+  RefreshCw,
+  Wrench,
+  CornerDownRight,
+  ExternalLink,
+} from "lucide-react";
 import type { ParsedEvent, ToolBlock } from "@/lib/client/types";
+import { extractSources, sourceLabel } from "@/lib/client/sources";
 import { getJson, qs, ApiRequestError } from "@/lib/client/api";
 import {
   Sheet,
@@ -89,6 +97,7 @@ function ToolBlockChip({ tool }: { tool: ToolBlock }) {
   const body = isUse ? prettyInput(tool.input) : tool.content?.trim() || null;
   const label = isUse ? tool.name ?? "tool" : tool.name ?? "result";
   const isError = tool.status?.toLowerCase() === "error";
+  const sources = !isUse && tool.content ? extractSources(tool.content) : [];
 
   return (
     <div className="overflow-hidden rounded-md border border-border/70 bg-muted/30">
@@ -123,7 +132,30 @@ function ToolBlockChip({ tool }: { tool: ToolBlock }) {
           />
         )}
       </button>
-      {open && body && (
+      {open && sources.length > 0 && (
+        <div className="border-t border-border/70 bg-background/40 px-2 py-1.5">
+          <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
+            Sources ({sources.length})
+          </span>
+          <ul className="mt-1 flex flex-col gap-1">
+            {sources.map((s, i) => (
+              <li key={`${s.url}-${i}`} className="flex items-start gap-1.5 text-xs">
+                <ExternalLink className="mt-0.5 size-3 shrink-0 text-sky-400" />
+                <a
+                  href={s.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-w-0 break-words text-sky-400 hover:text-sky-300 hover:underline"
+                  title={s.url}
+                >
+                  {sourceLabel(s)}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {open && body && sources.length === 0 && (
         <pre className="max-h-48 overflow-auto border-t border-border/70 bg-background/40 px-2 py-1.5 font-mono text-[0.7rem] whitespace-pre-wrap break-words">
           {body}
         </pre>

@@ -33,6 +33,25 @@ import {
 //
 // Streaming operations live in invoke.ts (chat) and command.ts (run command).
 
+/**
+ * Opt-in raw-payload debug dump (CLAUDE.md §4: full dumps only at DEBUG). Set
+ * AGENTCORE_DEBUG_STREAM=1 to capture raw AWS response shapes (e.g. the memory
+ * ListEvents tool-result / citation shape) for verification. Off by default.
+ */
+const OPS_DEBUG = process.env.AGENTCORE_DEBUG_STREAM === '1';
+
+function debugRaw(label: string, value: unknown): void {
+  if (!OPS_DEBUG) return;
+  let json: string;
+  try {
+    json = JSON.stringify(value);
+  } catch {
+    json = '<unserializable>';
+  }
+  if (json.length > 40000) json = json.slice(0, 40000) + `…<truncated ${json.length} chars>`;
+  console.debug(`[ops:raw ${label}] ${json}`);
+}
+
 export async function listHarnesses(region?: string): Promise<HarnessSummary[]> {
   const { control } = clientsFor(region);
   const all: HarnessSummary[] = [];
@@ -110,6 +129,7 @@ export async function listEvents(
       nextToken: params.nextToken,
     })
   );
+  debugRaw('ListEvents', out);
   return parseEvents(out);
 }
 

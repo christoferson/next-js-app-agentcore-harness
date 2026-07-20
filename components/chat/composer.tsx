@@ -11,12 +11,15 @@ export function Composer({
   streaming,
   disabled,
   placeholder,
+  railOpen = false,
 }: {
   onSend: (text: string) => void;
   onStop: () => void;
   streaming: boolean;
   disabled: boolean;
   placeholder?: string;
+  /** Match the message column's width when the activity rail is open. */
+  railOpen?: boolean;
 }) {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -42,7 +45,8 @@ export function Composer({
     <div className="border-t border-border bg-background/80 p-3 backdrop-blur">
       <div
         className={cn(
-          "mx-auto flex max-w-3xl items-end gap-2 rounded-xl border border-border bg-card p-2 shadow-sm transition-colors focus-within:border-ring",
+          "mx-auto flex items-end gap-2 rounded-xl border border-border bg-card p-2 shadow-sm transition-colors focus-within:border-ring",
+          railOpen ? "max-w-5xl" : "max-w-3xl",
           disabled && "opacity-60"
         )}
       >
@@ -81,7 +85,12 @@ export function Composer({
           </Button>
         )}
       </div>
-      <p className="mx-auto mt-1.5 max-w-3xl px-1 text-center text-[10px] text-muted-foreground">
+      <p
+        className={cn(
+          "mx-auto mt-1.5 px-1 text-center text-[10px] text-muted-foreground",
+          railOpen ? "max-w-5xl" : "max-w-3xl"
+        )}
+      >
         Enter to send · Shift+Enter for newline
       </p>
     </div>

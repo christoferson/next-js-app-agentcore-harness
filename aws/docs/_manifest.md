@@ -43,6 +43,22 @@ files of the installed SDK before coding. All required command classes exist in
 3. **`EndSession`** input field is `sessionIdentifier` (not `sessionId`); response
    returns `{ sessionId, sessionArn, sessionStatus: 'ACTIVE'|'EXPIRED'|'ENDED' }`.
 
+### InvokeHarness stream — tool-result shape (verified against SDK types)
+
+The `InvokeHarness` response stream carries tool results across TWO events (types
+`HarnessContentBlockStart` / `HarnessContentBlockDelta` in models_0.d.ts):
+- **Block start**: `contentBlockStart.start.toolResult = { toolUseId, status? }` —
+  identity + status only, NO content.
+- **Content deltas**: `contentBlockDelta.delta.toolResult` is an **ARRAY** of
+  `{ text } | { json }` (`HarnessToolResultBlockDelta[]`) carrying only the block
+  index — NOT the toolUseId. The adapter keys the result's id/status by
+  `contentBlockIndex` from the start event so deltas attach correctly.
+- Tool USE input, by contrast, streams as `delta.toolUse.input` (a partial-JSON
+  string) — a single object, not an array.
+- NOTE: whether a given harness emits tool results into the client stream at all
+  (vs running the tool loop server-side and streaming only the final answer) is a
+  HARNESS-side behavior, not an SDK guarantee. The app renders results when present.
+
 ### Shapes CONFIRMED matching SPEC §5
 
 - `InvokeHarness` input: `{ harnessArn, runtimeSessionId (required), actorId?,

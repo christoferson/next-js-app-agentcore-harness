@@ -83,6 +83,72 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 /**
+ * Stream debug logging (opt-in). Enable by setting AGENTCORE_DEBUG_STREAM=1
+ * (works in dev AND production builds) — logs the STRUCTURAL InvokeHarness events
+ * (block starts/stops, tool results, message stop, metadata) so the real tool /
+ * citation shape can be captured for verification (CLAUDE.md §2/§8). The high-
+ * volume text/tool-input deltas are NOT logged per-event — they're summarized as
+ * counts at stream end, so the log stays readable. Off by default.
+ */
+const STREAM_DEBUG = process.env.AGENTCORE_DEBUG_STREAM === '1';
+
+/**
+ * Classify a delta event that we summarize rather than log line-by-line. All
+ * three delta kinds stream in many fragments (tool-result content can be a
+ * full page scrape — huge), so per-event logging floods. Block starts/stops,
+ * messageStop and metadata are NOT noisy and always log in full.
+ */
+function noisyDeltaKind(
+  event: Record<string, unknown>
+): 'text' | 'toolInput' | 'toolResult' | null {
+  if (!isRecord(event.contentBlockDelta)) return null;
+  const delta = event.contentBlockDelta.delta;
+  if (!isRecord(delta)) return null;
+  if (typeof delta.text === 'string') return 'text';
+  if (isRecord(delta.toolUse)) return 'toolInput';
+  if (delta.toolResult !== undefined) return 'toolResult';
+  return null;
+}
+
+function debugStructuralEvent(event: unknown): void {
+  if (!STREAM_DEBUG) return;
+  if (isRecord(event) && noisyDeltaKind(event)) return; // summarized instead
+  let json: string;
+  try {
+    json = JSON.stringify(event);
+  } catch {
+    json = '<unserializable>';
+  }
+  if (json.length > 4000) json = json.slice(0, 4000) + `…<truncated ${json.length} chars>`;
+  console.debug(`[invoke] ${json}`);
+}
+
+/**
+ * Flatten a tool-result delta ARRAY to text (verified shape, SDK type
+ * `HarnessToolResultBlockDelta[]`): each item is `{text}` or `{json}`. A search
+ * tool typically returns JSON-encoded sources here. Defensive: tolerates any
+ * odd item without throwing.
+ */
+function flattenToolResultDelta(items: unknown): string {
+  const arr = Array.isArray(items) ? items : [items];
+  const parts: string[] = [];
+  for (const c of arr) {
+    if (typeof c === 'string') parts.push(c);
+    else if (isRecord(c)) {
+      if (typeof c.text === 'string') parts.push(c.text);
+      else if (c.json !== undefined) {
+        try {
+          parts.push(JSON.stringify(c.json));
+        } catch {
+          /* skip unserializable */
+        }
+      }
+    }
+  }
+  return parts.join('');
+}
+
+/**
  * Defensive adapter: InvokeHarness stream events → StreamEvent (SPEC §5.2).
  * Unknown event/delta types are logged at debug and skipped — never crash
  * (CLAUDE.md §3: deltas may lack `text`; tool-use input deltas, reasoning
@@ -94,8 +160,38 @@ export async function* adaptInvokeStream(
   // Map contentBlockIndex → toolUseId so tool-input deltas (which carry only an
   // index) attach to the right tool. A block index is reused per message.
   const toolByIndex = new Map<number, string>();
+  // Tool-RESULT block start carries {toolUseId, status} but no content; the
+  // content arrives in later deltas (an array of {text}|{json}) that carry only
+  // the block index. Track the result's identity by index so deltas attach.
+  const resultByIndex = new Map<number, { toolUseId?: string; status?: string }>();
 
+  let textDeltas = 0;
+  let toolInputDeltas = 0;
+  let toolResultDeltas = 0;
+  let toolResultBytes = 0;
+  let loggedResultSample = false;
   for await (const event of stream) {
+    debugStructuralEvent(event);
+    if (isRecord(event)) {
+      const noisy = noisyDeltaKind(event);
+      if (noisy === 'text') textDeltas++;
+      else if (noisy === 'toolInput') toolInputDeltas++;
+      else if (noisy === 'toolResult') {
+        toolResultDeltas++;
+        const d = isRecord(event.contentBlockDelta)
+          ? event.contentBlockDelta.delta
+          : undefined;
+        const frag = isRecord(d) ? flattenToolResultDelta(d.toolResult) : '';
+        toolResultBytes += frag.length;
+        // Log ONE short sample so the result shape is visible without flooding.
+        if (STREAM_DEBUG && !loggedResultSample && frag.length > 0) {
+          loggedResultSample = true;
+          console.debug(
+            `[invoke] tool-result sample (first ~200 chars): ${frag.slice(0, 200)}`
+          );
+        }
+      }
+    }
     if (!isRecord(event)) continue;
 
     if (isRecord(event.contentBlockStart)) {
@@ -112,6 +208,18 @@ export async function* adaptInvokeStream(
           toolUseId: toolUse.toolUseId,
           name: typeof toolUse.name === 'string' ? toolUse.name : 'tool',
         };
+        continue;
+      }
+      // Tool-result block start: record {toolUseId, status} by index. Content
+      // follows in deltas (SDK: HarnessToolResultBlockStart has no content).
+      if (start && isRecord(start.toolResult)) {
+        const tr = start.toolResult;
+        if (typeof cbs.contentBlockIndex === 'number') {
+          resultByIndex.set(cbs.contentBlockIndex, {
+            toolUseId: typeof tr.toolUseId === 'string' ? tr.toolUseId : undefined,
+            status: typeof tr.status === 'string' ? tr.status : undefined,
+          });
+        }
       }
       continue;
     }
@@ -136,7 +244,23 @@ export async function* adaptInvokeStream(
         };
         continue;
       }
-      // reasoningContent / toolResult deltas: skip (not rendered as text).
+      // Tool-result content delta: an ARRAY of {text}|{json} (SDK verified). The
+      // toolUseId/status came from the block start, keyed by index.
+      if (delta.toolResult !== undefined) {
+        const idx =
+          typeof cbd.contentBlockIndex === 'number'
+            ? cbd.contentBlockIndex
+            : undefined;
+        const meta = idx !== undefined ? resultByIndex.get(idx) : undefined;
+        yield {
+          type: 'tool-result',
+          toolUseId: meta?.toolUseId,
+          content: flattenToolResultDelta(delta.toolResult),
+          status: meta?.status,
+        };
+        continue;
+      }
+      // reasoningContent deltas: skip (not rendered as text).
       continue;
     }
 
@@ -213,6 +337,14 @@ export async function* adaptInvokeStream(
         console.debug('[invoke] skipping unknown stream event:', Object.keys(event));
       }
     }
+  }
+
+  if (STREAM_DEBUG) {
+    console.debug(
+      `[invoke] stream end — summarized ${textDeltas} text delta(s), ` +
+        `${toolInputDeltas} tool-input delta(s), ${toolResultDeltas} ` +
+        `tool-result delta(s) (${toolResultBytes} chars total)`
+    );
   }
 }
 

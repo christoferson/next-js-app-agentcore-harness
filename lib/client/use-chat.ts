@@ -10,6 +10,10 @@ export interface ToolRecord {
   name: string;
   input: string;
   done: boolean;
+  /** tool result content (e.g. search sources), when the harness streams one */
+  result?: string;
+  /** result status when present, e.g. "success" | "error" */
+  resultStatus?: string;
 }
 
 export interface ChatMessage {
@@ -112,6 +116,23 @@ export function useChat() {
             ),
           }));
           break;
+        case "tool-result": {
+          const targetId = e.toolUseId || lastToolRef.current;
+          patchActive((m) => ({
+            ...m,
+            tools: m.tools.map((t) =>
+              t.toolUseId === targetId
+                ? {
+                    ...t,
+                    done: true,
+                    result: (t.result ?? "") + e.content,
+                    resultStatus: e.status ?? t.resultStatus,
+                  }
+                : t
+            ),
+          }));
+          break;
+        }
         case "usage":
           patchActive((m) => ({
             ...m,

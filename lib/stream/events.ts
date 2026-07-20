@@ -19,6 +19,11 @@ export type StreamEvent =
   | { type: 'tool-start'; toolUseId: string; name: string }
   | { type: 'tool-input-delta'; toolUseId: string; input: string }
   | { type: 'tool-stop'; toolUseId?: string }
+  // Tool result (e.g. web-search sources). Shape verified against SDK types
+  // (HarnessContentBlockStart.ToolResultMember carries {toolUseId, status};
+  // content streams as HarnessToolResultBlockDelta[] of {text}|{json}). The
+  // adapter attaches id/status from the block start and flattens delta content.
+  | { type: 'tool-result'; toolUseId?: string; content: string; status?: string }
   | { type: 'usage'; usage: StreamUsage; latencyMs?: number }
   | { type: 'stop'; stopReason: string }
   // ── command (InvokeAgentRuntimeCommand) ───────────────────────────────
