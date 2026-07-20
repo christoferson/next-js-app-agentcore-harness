@@ -40,12 +40,18 @@ interface OutputLine {
 export function RunCommandDialog({
   open,
   onOpenChange,
-  agentRuntimeArn,
+  commandTarget,
   sessionId,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  agentRuntimeArn: string | null;
+  /**
+   * The harness ARN. Harness-managed runtimes reject their underlying runtime
+   * ARN ("...is managed by a harness and cannot be invoked directly. Use the
+   * InvokeAgentRuntimeCommand API with the relevant harness ID instead.") — the
+   * command target must be the harness identity, not the GetHarness runtime ARN.
+   */
+  commandTarget: string | null;
   sessionId: string;
 }) {
   const [command, setCommand] = useState("");
@@ -83,7 +89,7 @@ export function RunCommandDialog({
   }, []);
 
   const run = useCallback(async () => {
-    if (!agentRuntimeArn || !command.trim() || running) return;
+    if (!commandTarget || !command.trim() || running) return;
     setLines([]);
     setExitCode(null);
     setRunning(true);
@@ -92,7 +98,7 @@ export function RunCommandDialog({
     try {
       await streamSse(
         "/api/command",
-        { agentRuntimeArn, sessionId, command },
+        { commandTarget, sessionId, command },
         onEvent,
         ctrl.signal
       );
@@ -100,7 +106,7 @@ export function RunCommandDialog({
       if (ctrlRef.current === ctrl) ctrlRef.current = null;
       setRunning(false);
     }
-  }, [agentRuntimeArn, command, sessionId, running, onEvent]);
+  }, [commandTarget, command, sessionId, running, onEvent]);
 
   const stop = useCallback(() => {
     ctrlRef.current?.abort();
@@ -118,9 +124,9 @@ export function RunCommandDialog({
           </DialogTitle>
         </DialogHeader>
 
-        {agentRuntimeArn === null ? (
+        {commandTarget === null ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            This harness has no runtime environment ARN — Run Command unavailable.
+            No harness selected — Run Command unavailable.
           </p>
         ) : (
           <div className="flex flex-col gap-4">

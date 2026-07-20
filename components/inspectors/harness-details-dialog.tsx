@@ -22,12 +22,14 @@ function fmtDate(value?: string): string {
 function Section({
   title,
   children,
+  className,
 }: {
   title: string;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="flex flex-col gap-2">
+    <section className={cn("flex flex-col gap-2", className)}>
       <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
       </h3>
@@ -77,7 +79,7 @@ export function HarnessDetailsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Harness Details</DialogTitle>
         </DialogHeader>
@@ -97,7 +99,7 @@ export function HarnessDetailsDialog({
             Select a harness and load details.
           </p>
         ) : (
-          <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
             <Section title="Identity">
               <Row label="Name">{details.name}</Row>
               <IdField label="ID" value={details.id} />
@@ -112,14 +114,6 @@ export function HarnessDetailsDialog({
                   <span className="text-muted-foreground">—</span>
                 )}
               </Row>
-            </Section>
-
-            <Section title="Limits">
-              <div className="flex flex-wrap gap-2">
-                <Chip label="Max iterations" value={details.maxIterations} />
-                <Chip label="Max tokens" value={details.maxTokens} />
-                <Chip label="Timeout (s)" value={details.timeoutSeconds} />
-              </div>
             </Section>
 
             <Section title="Memory">
@@ -143,7 +137,20 @@ export function HarnessDetailsDialog({
               )}
             </Section>
 
-            <Section title="Default Model & Inference">
+            <Section title="Limits">
+              <div className="flex flex-wrap gap-2">
+                <Chip label="Max iterations" value={details.maxIterations} />
+                <Chip label="Max tokens" value={details.maxTokens} />
+                <Chip label="Timeout (s)" value={details.timeoutSeconds} />
+              </div>
+            </Section>
+
+            <Section title="Timestamps">
+              <Row label="Created">{fmtDate(details.createdAt)}</Row>
+              <Row label="Updated">{fmtDate(details.updatedAt)}</Row>
+            </Section>
+
+            <Section title="Default Model & Inference" className="md:col-span-2">
               <Row label="Model ID">
                 {details.model.modelId ? (
                   <span className="font-mono text-xs">
@@ -161,7 +168,7 @@ export function HarnessDetailsDialog({
               </div>
             </Section>
 
-            <Section title="System Prompt">
+            <Section title="System Prompt" className="md:col-span-2">
               {details.systemPrompt ? (
                 <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded bg-muted/40 p-2 text-xs">
                   {details.systemPrompt}
@@ -173,12 +180,7 @@ export function HarnessDetailsDialog({
               )}
             </Section>
 
-            <Section title="Timestamps">
-              <Row label="Created">{fmtDate(details.createdAt)}</Row>
-              <Row label="Updated">{fmtDate(details.updatedAt)}</Row>
-            </Section>
-
-            <Section title="Raw">
+            <Section title="Raw" className="md:col-span-2">
               <details className="group">
                 <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
                   Raw JSON

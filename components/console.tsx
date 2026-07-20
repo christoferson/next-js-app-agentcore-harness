@@ -354,7 +354,7 @@ export function Console() {
       <RunCommandDialog
         open={commandOpen}
         onOpenChange={setCommandOpen}
-        agentRuntimeArn={details?.agentRuntimeArn ?? null}
+        commandTarget={details?.arn ?? null}
         sessionId={sessionId}
       />
     </div>

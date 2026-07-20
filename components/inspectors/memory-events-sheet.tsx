@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, Loader2, RefreshCw } from "lucide-react";
-import type { ParsedEvent } from "@/lib/client/types";
+import { ChevronDown, Loader2, RefreshCw, Wrench, CornerDownRight } from "lucide-react";
+import type { ParsedEvent, ToolBlock } from "@/lib/client/types";
 import { getJson, qs, ApiRequestError } from "@/lib/client/api";
 import {
   Sheet,
@@ -62,6 +62,74 @@ function formatTs(ts?: string): string {
   if (!ts) return "—";
   const d = new Date(ts);
   return Number.isNaN(d.getTime()) ? ts : d.toLocaleString();
+}
+
+function prettyInput(input: unknown): string | null {
+  if (input === undefined || input === null) return null;
+  if (typeof input === "string") {
+    const s = input.trim();
+    if (!s) return null;
+    try {
+      return JSON.stringify(JSON.parse(s), null, 2);
+    } catch {
+      return s;
+    }
+  }
+  try {
+    return JSON.stringify(input, null, 2);
+  } catch {
+    return String(input);
+  }
+}
+
+/** One tool-use / tool-result block, rendered as an expandable chip. */
+function ToolBlockChip({ tool }: { tool: ToolBlock }) {
+  const [open, setOpen] = useState(false);
+  const isUse = tool.kind === "use";
+  const body = isUse ? prettyInput(tool.input) : tool.content?.trim() || null;
+  const label = isUse ? tool.name ?? "tool" : tool.name ?? "result";
+  const isError = tool.status?.toLowerCase() === "error";
+
+  return (
+    <div className="overflow-hidden rounded-md border border-border/70 bg-muted/30">
+      <button
+        type="button"
+        onClick={() => body && setOpen((o) => !o)}
+        className={cn(
+          "flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs",
+          body && "hover:bg-muted/60"
+        )}
+      >
+        {isUse ? (
+          <Wrench className="size-3 shrink-0 text-sky-400" />
+        ) : (
+          <CornerDownRight
+            className={cn(
+              "size-3 shrink-0",
+              isError ? "text-red-400" : "text-emerald-400"
+            )}
+          />
+        )}
+        <span className="font-medium text-foreground">{label}</span>
+        <span className="rounded bg-background/60 px-1 text-[0.65rem] uppercase tracking-wide text-muted-foreground">
+          {isUse ? "call" : isError ? "error" : "result"}
+        </span>
+        {body && (
+          <ChevronDown
+            className={cn(
+              "ml-auto size-3 text-muted-foreground transition-transform",
+              open && "rotate-180"
+            )}
+          />
+        )}
+      </button>
+      {open && body && (
+        <pre className="max-h-48 overflow-auto border-t border-border/70 bg-background/40 px-2 py-1.5 font-mono text-[0.7rem] whitespace-pre-wrap break-words">
+          {body}
+        </pre>
+      )}
+    </div>
+  );
 }
 
 export function MemoryEventsSheet({
@@ -266,6 +334,22 @@ export function MemoryEventsSheet({
                           )}
                         >
                           {e.text}
+                        </p>
+                      </div>
+                    )}
+
+                    {e.tools && e.tools.length > 0 && (
+                      <div className="flex flex-col gap-1 px-3 pb-2">
+                        {e.tools.map((t, i) => (
+                          <ToolBlockChip key={t.toolUseId ?? i} tool={t} />
+                        ))}
+                      </div>
+                    )}
+
+                    {!e.text && (!e.tools || e.tools.length === 0) && (
+                      <div className="px-3 pb-2">
+                        <p className="text-xs italic text-muted-foreground">
+                          No displayable content.
                         </p>
                       </div>
                     )}

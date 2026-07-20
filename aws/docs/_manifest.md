@@ -28,10 +28,17 @@ files of the installed SDK before coding. All required command classes exist in
    Input: `{ memoryId, namespace, searchCriteria: { searchQuery (required), topK,
    memoryStrategyId }, maxResults, nextToken }`. Output: `memoryRecordSummaries`
    (same shape as `ListMemoryRecords`). `/api/memory/records` uses this when `query` present.
-2. **`InvokeAgentRuntimeCommandCommand`** (note doubled "Command") targets
-   `agentRuntimeArn`, NOT the harness ARN. The runtime ARN is read from
-   `GetHarness → harness.environment.agentCoreRuntimeEnvironment.agentRuntimeArn`.
-   Input body: `{ command (required), timeout? }`. Output stream union:
+2. **`InvokeAgentRuntimeCommandCommand`** (note doubled "Command"). The SDK input
+   field is `agentRuntimeArn`, but for a HARNESS-MANAGED runtime the service
+   REJECTS the underlying runtime ARN at call time:
+   > "The agent runtime arn:...:runtime/... is managed by a harness and cannot be
+   > invoked directly. Use the InvokeAgentRuntimeCommand API with the relevant
+   > harness ID instead."
+   So the target passed in `agentRuntimeArn` must be the **harness ARN** (the
+   `GetHarness` resolved `environment.agentCoreRuntimeEnvironment.agentRuntimeArn`
+   does NOT work). `/api/command` takes `commandTarget` from the client (the
+   harness ARN) and sends it as `agentRuntimeArn`. Input body:
+   `{ command (required), timeout? }`. Output stream union:
    `chunk.{ contentStart | contentDelta.{stdout,stderr} | contentStop.exitCode }`.
 3. **`EndSession`** input field is `sessionIdentifier` (not `sessionId`); response
    returns `{ sessionId, sessionArn, sessionStatus: 'ACTIVE'|'EXPIRED'|'ENDED' }`.

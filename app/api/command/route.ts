@@ -10,7 +10,10 @@ import { encodeSse, SSE_HEADERS, type StreamEvent } from '@/lib/stream/events';
 export const runtime = 'nodejs';
 
 const bodySchema = z.object({
-  agentRuntimeArn: z.string().min(1),
+  // The command target. For harness-managed runtimes the service rejects the
+  // underlying runtime ARN and requires the harness identity here (see
+  // aws/docs/_manifest.md divergence #2), so the client sends the harness ARN.
+  commandTarget: z.string().min(1),
   sessionId: z.string().min(1),
   command: z.string().min(1),
 });
@@ -36,10 +39,10 @@ export async function POST(request: Request) {
       parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')
     );
   }
-  const { agentRuntimeArn, sessionId, command } = parsed.data;
+  const { commandTarget, sessionId, command } = parsed.data;
 
   const req = buildCommandRequest({
-    agentRuntimeArn,
+    agentRuntimeArn: commandTarget,
     runtimeSessionId: sessionId,
     command,
   });

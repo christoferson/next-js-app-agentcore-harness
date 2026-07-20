@@ -6,9 +6,12 @@ import {
 import { clientsFor } from './clients';
 import type { StreamEvent } from '@/lib/stream/events';
 
-// Run Command adapter (SPEC §5.5). Targets `agentRuntimeArn` (resolved from
-// GetHarness → environment.agentCoreRuntimeEnvironment.agentRuntimeArn), NOT the
-// harness ARN — see aws/docs/_manifest.md divergence #2.
+// Run Command adapter (SPEC §5.5). The SDK field is `agentRuntimeArn`, but for
+// harness-managed runtimes the service REJECTS the underlying runtime ARN
+// ("...is managed by a harness and cannot be invoked directly. Use the
+// InvokeAgentRuntimeCommand API with the relevant harness ID instead.") — so the
+// caller passes the HARNESS ARN as the target here. See aws/docs/_manifest.md
+// divergence #2.
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;

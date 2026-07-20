@@ -78,7 +78,13 @@ async function main() {
       'totally invalid',
     ],
   });
-  ok('decoded text + tool marker', ev.events[0].text === 'hello\n[tool_use: search]');
+  ok('decoded text has no tool markers', ev.events[0].text === 'hello');
+  ok(
+    'tool block extracted as structured data',
+    ev.events[0].tools?.length === 1 &&
+      ev.events[0].tools?.[0].kind === 'use' &&
+      ev.events[0].tools?.[0].name === 'search'
+  );
   ok('usage decoded', ev.events[0].usage?.totalTokens === 12);
   ok('messageId decoded', ev.events[0].messageId === 'msg-1');
   ok('undecodable falls back to raw text', ev.events[1].text === 'raw not json {');

@@ -195,14 +195,30 @@ export interface EventUsage {
 
 export type ParsedEventType = 'conversational' | 'blob' | 'unknown';
 
+/** A tool-use or tool-result block extracted from a conversational message. */
+export interface ToolBlock {
+  kind: 'use' | 'result';
+  /** tool name (use blocks); result blocks often omit it */
+  name?: string;
+  toolUseId?: string;
+  /** tool-use input, if any (kept as-is for pretty-printing) */
+  input?: unknown;
+  /** tool-result content, best-effort flattened to text */
+  content?: string;
+  /** result status when present, e.g. "success" | "error" */
+  status?: string;
+}
+
 export interface ParsedEvent {
   eventId: string;
   timestamp?: string;
   type: ParsedEventType;
   /** USER | ASSISTANT | TOOL | OTHER (uppercased) when conversational */
   role?: string;
-  /** decoded message text (best-effort) */
+  /** decoded message text (real text blocks only — no tool markers) */
   text?: string;
+  /** structured tool-use / tool-result blocks (rendered as chips, not text) */
+  tools?: ToolBlock[];
   messageId?: string;
   usage?: EventUsage;
   metrics?: Record<string, unknown>;
@@ -217,8 +233,53 @@ export interface ParsedEvent {
  * `{message: {role, content[], metadata: {usage, metrics}}, message_id, ...}`.
  * Falls back to the raw text when it isn't valid JSON.
  */
+/** Best-effort flatten a toolResult's content array to a short text string. */
+function flattenToolResultContent(content: unknown): string | undefined {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return undefined;
+  const parts = content
+    .map((c) => {
+      if (typeof c === 'string') return c;
+      if (!isRecord(c)) return undefined;
+      if (typeof c.text === 'string') return c.text;
+      if (c.json !== undefined) {
+        try {
+          return JSON.stringify(c.json);
+        } catch {
+          return undefined;
+        }
+      }
+      return undefined;
+    })
+    .filter((t): t is string => typeof t === 'string');
+  return parts.length ? parts.join('\n') : undefined;
+}
+
+/** Extract a tool block from a message-content entry, or undefined. */
+function toolBlockFrom(b: Record<string, unknown>): ToolBlock | undefined {
+  if (isRecord(b.toolUse)) {
+    return {
+      kind: 'use',
+      name: asString(b.toolUse.name),
+      toolUseId: asString(b.toolUse.toolUseId),
+      input: b.toolUse.input,
+    };
+  }
+  if (isRecord(b.toolResult)) {
+    const tr = b.toolResult;
+    return {
+      kind: 'result',
+      toolUseId: asString(tr.toolUseId),
+      content: flattenToolResultContent(tr.content),
+      status: asString(tr.status),
+    };
+  }
+  return undefined;
+}
+
 function decodeConversational(conv: Record<string, unknown>): {
   text?: string;
+  tools?: ToolBlock[];
   messageId?: string;
   usage?: EventUsage;
   metrics?: Record<string, unknown>;
@@ -240,24 +301,28 @@ function decodeConversational(conv: Record<string, unknown>): {
   const metadata =
     message && isRecord(message.metadata) ? message.metadata : undefined;
 
-  // message.content is an array of blocks ({text} | {toolUse} | ...).
+  // message.content is an array of blocks ({text} | {toolUse} | {toolResult}).
+  // Keep real text separate from tool blocks so the UI can render each well.
   let text: string | undefined;
+  let tools: ToolBlock[] | undefined;
   if (message && Array.isArray(message.content)) {
-    const parts = message.content
-      .map((b) => {
-        if (!isRecord(b)) return undefined;
-        if (typeof b.text === 'string') return b.text;
-        if (isRecord(b.toolUse)) {
-          const name = asString(b.toolUse.name) ?? 'tool';
-          return `[tool_use: ${name}]`;
-        }
-        if (isRecord(b.toolResult) || 'toolResult' in b) return '[tool_result]';
-        return undefined;
-      })
-      .filter((t): t is string => typeof t === 'string');
-    if (parts.length) text = parts.join('\n');
+    const textParts: string[] = [];
+    const toolBlocks: ToolBlock[] = [];
+    for (const b of message.content) {
+      if (!isRecord(b)) continue;
+      if (typeof b.text === 'string') {
+        textParts.push(b.text);
+        continue;
+      }
+      const tb = toolBlockFrom(b);
+      if (tb) toolBlocks.push(tb);
+    }
+    if (textParts.length) text = textParts.join('\n');
+    if (toolBlocks.length) tools = toolBlocks;
   }
-  if (text === undefined) text = rawText;
+  // Fall back to the raw decoded text only when there were no structured blocks
+  // at all (neither text nor tools) — avoids dumping the whole JSON envelope.
+  if (text === undefined && !tools) text = rawText;
 
   const usageRaw = metadata && isRecord(metadata.usage) ? metadata.usage : undefined;
   const usage: EventUsage | undefined = usageRaw
@@ -270,6 +335,7 @@ function decodeConversational(conv: Record<string, unknown>): {
 
   return {
     text,
+    tools,
     messageId: asString(envelope.message_id),
     usage,
     metrics:
@@ -304,6 +370,7 @@ export function parseEvent(event: unknown): ParsedEvent {
         type: 'conversational',
         role: (asString(conv.role) ?? 'OTHER').toUpperCase(),
         text: decoded.text,
+        tools: decoded.tools,
         messageId: decoded.messageId,
         usage: decoded.usage,
         metrics: decoded.metrics,

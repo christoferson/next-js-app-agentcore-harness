@@ -38,12 +38,22 @@ export interface HarnessDetails {
   raw: unknown;
 }
 
+export interface ToolBlock {
+  kind: "use" | "result";
+  name?: string;
+  toolUseId?: string;
+  input?: unknown;
+  content?: string;
+  status?: string;
+}
+
 export interface ParsedEvent {
   eventId: string;
   timestamp?: string;
   type: "conversational" | "blob" | "unknown";
   role?: string;
   text?: string;
+  tools?: ToolBlock[];
   messageId?: string;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   metrics?: Record<string, unknown>;
