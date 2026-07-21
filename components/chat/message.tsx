@@ -1,10 +1,53 @@
 "use client";
 
-import { BotIcon, AlertTriangleIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { BotIcon, AlertTriangleIcon, Loader2Icon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/client/use-chat";
 import { Markdown } from "@/components/common/markdown";
 import { ToolActivity } from "./tool-activity";
+
+/** Format elapsed ms as compact "1.2s" / "1m 05s". */
+function fmtElapsed(ms: number): string {
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(1)}s`;
+  const m = Math.floor(s / 60);
+  const rem = Math.floor(s % 60);
+  return `${m}m ${String(rem).padStart(2, "0")}s`;
+}
+
+/**
+ * Streaming status indicator — visible for the WHOLE in-flight turn, including
+ * during tool use (the previous pulse cursors hid themselves then). Shows a
+ * context-aware label and a live elapsed timer.
+ */
+function StreamingIndicator({ m }: { m: ChatMessage }) {
+  // The indicator only mounts while streaming, so mount ≈ turn start.
+  const [start] = useState(() => Date.now());
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(Date.now() - start), 100);
+    return () => clearInterval(id);
+  }, [start]);
+
+  const activeTool = m.tools.find((t) => !t.done);
+  const label = activeTool
+    ? `Using ${activeTool.name}…`
+    : m.text
+      ? "Responding…"
+      : "Thinking…";
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <Loader2Icon className="size-3.5 animate-spin text-violet-400" />
+      <span>{label}</span>
+      <span className="font-mono tabular-nums text-violet-400/80">
+        {fmtElapsed(elapsed)}
+      </span>
+    </div>
+  );
+}
 
 function UsageFooter({ m }: { m: ChatMessage }) {
   const u = m.usage;
@@ -51,12 +94,7 @@ export function MessageBubble({ m }: { m: ChatMessage }) {
           <ToolActivity tools={m.tools} streaming={m.streaming} />
         )}
         {m.text && <Markdown text={m.text} />}
-        {m.streaming && !m.text && m.tools.length === 0 && (
-          <span className="inline-block h-4 w-2 animate-pulse rounded-sm bg-violet-400/60 align-middle" />
-        )}
-        {m.streaming && m.text && (
-          <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-violet-400/60 align-middle" />
-        )}
+        {m.streaming && <StreamingIndicator m={m} />}
         {m.error && (
           <div className="flex items-start gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-2 text-xs text-red-400">
             <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />

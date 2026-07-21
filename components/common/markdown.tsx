@@ -9,7 +9,7 @@ import { memo } from "react";
 // a re-parse of settled messages.
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
   return (
-    <div className="prose prose-sm prose-invert max-w-none prose-pre:my-2 prose-pre:rounded-lg prose-pre:bg-black/40 prose-code:before:content-none prose-code:after:content-none prose-p:my-1.5 prose-headings:mt-3">
+    <div className="prose prose-sm dark:prose-invert max-w-none prose-pre:my-2 prose-pre:overflow-hidden prose-pre:rounded-lg prose-pre:bg-transparent prose-pre:p-0 prose-code:before:content-none prose-code:after:content-none prose-p:my-1.5 prose-headings:mt-3">
       <ReactMarkdown rehypePlugins={[rehypeHighlight]}>{text}</ReactMarkdown>
     </div>
   );
